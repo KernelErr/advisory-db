@@ -2,6 +2,8 @@ import os
 import glob
 import toml
 import pymongo
+import requests
+import json
 
 MONGODB = os.getenv("MONGODB")
 
@@ -44,7 +46,7 @@ for file in files:
                 db.rust.insert_one(data)
             rust_count += 1
         except Exception as e:
-            print("Failed to process {}: {}".format(id, e))
+            print("Failed to process {}: {}".format(id, e.with_traceback()))
             continue
 
 files = glob.glob("crates/**/*.md")
@@ -54,6 +56,11 @@ for file in files:
         id = file.split('/')[2].split('.')[0]
         print("Processing {} - {}".format(crate, id))
         try:
+            crates_req = requests.get("https://crates.io/api/v1/crates/{}".format(crate))
+            crates_data = json.loads(crates_req.text)
+            crates_categories = []
+            for item in crates_data["categories"]:
+                crates_categories.append(item["category"])
             contents = f.readlines()
             toml_contents = ""
             for line in contents:
@@ -73,11 +80,12 @@ for file in files:
             if "versions" in raw_data:
                 for (key, value) in raw_data["versions"].items():
                     data["versions_{}".format(key)] = value
+            data["crates_categories"] = crates_categories
             if db.crates.find_one({"advisory_id": id}) is None:
                 db.crates.insert_one(data)
             crates_count += 1
         except Exception as e:
-            print("Failed to process {}: {}".format(id, e))
+            print("Failed to process {}: {}".format(id, e.with_traceback()))
             continue
 
 print("Processed {} Rust advisories and {} crates advisories".format(rust_count, crates_count))
